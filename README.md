@@ -39,11 +39,13 @@ vapor toward saturation below 200 hPa where WWLLN observations are present, as i
 	+ `$WRF/share/wrf_fddaobs_in.F`
 + `report.pdf`: a description of the technique and WRF modifications.
 + `namelist.input`: an example namelist.input used for 2012 derecho experiment.
-+ `generate_obs.py`: script to generate WRF obs nudging input file, `OBS_DOMAIN101` (you must edit the top of this file).
-+ `wwlln.py`: python functions used by `generate_obs.py` (must be in same dir where `generate_obs.py` is run OR in your PYTHONPATH).
++ Python tools
+    + `generate_obs.py`: script to generate WRF obs nudging input file, `OBS_DOMAIN101` (you must edit the top of this file).
+    + `wwlln.py`: python functions used by `generate_obs.py` (must be in same dir where `generate_obs.py` is run OR in your PYTHONPATH).
 
 
 ## Caveats
 + The modifications were made to WRF v3.4. If you are using a later version of WRF, you will need to carefully merge differences between your version and v3.4 into the files included in this repository.
 + These modifications are not guaranteed to work when other observations are
 assimilated via WRF-FDDA. 
++ The Python tools were not written to be shared. Besides being quite ugly looking, they depend strongly on a directory structure I used for my WRF simulations. Someday I may change these, but for now use extreme caution.
