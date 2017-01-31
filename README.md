@@ -3,19 +3,21 @@ Ken Dixon. 2 June 2014.
 
 ## Description
 This repository contains the WRF code modifications necessary to nudge water
-vapor toward saturation below 200 hPa where WWLLN observations are present, as in [Dixon et al. 2016](http://journals.ametsoc.org/doi/abs/10.1175/JTECH-D-15-0188.1). The repository also contains Python scripts for converting [WWLLN](http://wwlln.net) data files into LittleR (the format for WRF FDDA observations).
+vapor toward saturation below 200 hPa where WWLLN observations are present, as in [Dixon et al. 2016](http://journals.ametsoc.org/doi/abs/10.1175/JTECH-D-15-0188.1) and my M.S. thesis. The repository also contains Python scripts for converting [WWLLN](http://wwlln.net) data files into LittleR (the format for WRF FDDA observations).
 
 ## Installation 
 
+***Warning***: This work has only been tested for WRF v3.4
+
 1. Make sure you can successfully compile WRF or have done so before.
-2. Replace "WRFV3/phys/module_fddaobs_rtfdda.F" with the file in this repository.
-3. Replace "WRFV3/share/wrf_fddaobs_in.F" with the file in this repository.
+2. Replace `WRFV3/phys/module_fddaobs_rtfdda.F` with the file in this repository.
+3. Replace `WRFV3/share/wrf_fddaobs_in.F` with the file in this repository.
 4. Recompile WRF.
 
 ## Execution
 
 1. Obtain WWLLN ".loc" files.
-2. Use "generate_obs.py" to create the LittleR format observations file required by WRF.
+2. Use `generate_obs.py` to create the LittleR format observations file required by WRF.
 3. Move the resulting `OBS_DOMAIN101` file to the directory where WRF is to be run.
 4. Set the namelist.
     + `obs_nudge_opt = 1`   (0=off / 1=on)
@@ -38,7 +40,7 @@ vapor toward saturation below 200 hPa where WWLLN observations are present, as i
 + `report.pdf`: a description of the technique and WRF modifications.
 + `namelist.input`: an example namelist.input used for 2012 derecho experiment.
 + `generate_obs.py`: script to generate WRF obs nudging input file, `OBS_DOMAIN101` (you must edit the top of this file).
-+ `wwlln.py`: python functions used by `generate_obs.py` (must be in same dir where `generate_obs.py` is run OR in your python path)
++ `wwlln.py`: python functions used by `generate_obs.py` (must be in same dir where `generate_obs.py` is run OR in your PYTHONPATH).
 
 
 ## Caveats
