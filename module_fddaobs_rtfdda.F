@@ -1,3 +1,8 @@
+#if ( HYBRID_COORD==1 )
+#define MU(...) (c1h(k)*XXPCXX(__VA_ARGS__)+c2h(k))
+#define XXPCXX(...) MU(__VA_ARGS__)
+#endif
+
 !WRF:MODEL_LAYER:PHYSICS
 !
 MODULE module_fddaobs_rtfdda
@@ -570,6 +575,7 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
 !         7                    Model surface press at obs loc (U-points)
 !         8                    Model surface press at obs loc (V-points)
 !         9                    RKO at U-points
+!         10                   Model Q at obs loc (T-points)
 
 !-----------------------------------------------------------------------
 !
@@ -670,15 +676,14 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
   integer k_start,k_end
   integer ips                            ! For printing obs information
   integer pnx                            ! obs index for printout
-
-  real gridx,gridy,dxob,dyob,dzob,dxob_ms,dyob_ms
-  real pob
-  real hob
-  real uratiob,vratiob,tratiob,tratxob,fnpf
   !kendixon: declare local variables for converting WWLLN VAROBS(4,n) 100 to qvapor
   real kd_eps,kd_e0,kd_eslcon1,kd_eslcon2,kd_esicon1,kd_esicon2,kd_t0,kd_rh1
   real kd_esat,kd_rsat,kd_pottemp,kd_t,kd_p
   !kendixon: end
+  real gridx,gridy,dxob,dyob,dzob,dxob_ms,dyob_ms
+  real pob
+  real hob
+  real uratiob,vratiob,tratiob,tratxob,fnpf
 
 #if ( defined( DM_PARALLEL ) && ( ! defined( STUBMPI ) ) )
   LOGICAL MP_LOCAL_DUMMASK(NIOBF)  ! Mask for work to be done on this processor
@@ -1290,60 +1295,28 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
 !       endif
 
 !           MOISTURE ERROR
-!kendixon: For WWLLN obs (plfo=10; r_data=100 from in4dob), compute actual
-!          varobs(4,N) as 100% relative humidity using temperature data
-            if(VAROBS(4,N).eq.100)then
-              kd_eps=0.62197          ! Constants carried from rh2r()
-              kd_e0=6.1078
-              kd_eslcon1=17.2693882
-              kd_eslcon2=35.86
-              kd_esicon1=21.8745584
-              kd_esicon2=7.66
-              kd_t0=260.            
-              kd_rh1=100*.01          ! RH=[0 to 100] * 0.01
-!              if(iice.eq.1.and.t.le.t0)then  ! DON'T USE e_s_ice
-!                esat=e0*exp(esicon1*(t-273.16)/(t-esicon2))
-!              else
-!              endif
-             ! Interpolate Potential Temperature TB (from model)
-              KOB = INT(VAROBS(5,N))   ! set vertical level to pressure_data
-              kd_pottemp = ((1.-DyOB)*((1.-                             &
-                           DxOB)*TB(IOB,KOB,JOB)+DxOB*                  &
-                           TB(IOB+1,KOB,JOB))+DyOB*((1.-DxOB)*          &
-                           TB(IOB,KOB,JOB+1)+DxOB*                      &
-                           TB(IOB+1,KOB,JOB+1)))
-              VAROBS(5,N)=(pbbo(KOB)+ppbo(KOB))  ! correct VAROBS press.(cb)
-              kd_p=10*(VAROBS(5,N))              ! pressure in mb
-              kd_t= (kd_pottemp+t0)*(kd_p/1000)**RCP
-              kd_esat=kd_e0*exp(kd_eslcon1*(kd_t-273.16)/(kd_t-kd_eslcon2))
-              kd_rsat=kd_eps*kd_esat/(kd_p-kd_esat) ! q_satvapor
-              VAROBS(4,N)=kd_rh1*kd_rsat       ! q_vapor
-!              if (iprt) then
-!                write(msg,fmt='(A,F8.4,A,F9.4,A,F7.4,A,F5.4,A,I2,A)')  &
-!                        'WWLLN errob: t=',kd_t,' p=',kd_p,' es=',      &
-!                        kd_esat,' rsat=',kd_rsat,' kob=',KOB,' ++ '
-!                call wrf_message(msg)
-!              endif
-!dixon_v2 : changed upper limit for nudging from 80mb to 200mb
-              if(kd_p.gt.200)then    ! As in in4dob, only nudge above 200mb
-                ERRF(4,N)=ERRF(4,N)+VAROBS(4,N)-((1.-DyOB)*((1.-          &
-                           DxOB)*QVB(IOB,KOB,JOB)+DxOB*                   &
-                           QVB(IOB+1,KOB,JOB))+DyOB*((1.-DxOB)*           &
-                           QVB(IOB,KOB,JOB+1)+DxOB*                       &
-                           QVB(IOB+1,KOB,JOB+1)))
-              endif
-            else
-              ERRF(4,N)=ERRF(4,N)+VAROBS(4,N)-((1.-DZOB)*((1.-DyOB)     &
-                         *((1.-DxOB)*QVB(IOB,KOB,JOB)+DxOB*             &
-                         QVB(IOB+1,KOB,JOB))+DyOB*((1.-DxOB)*           &
-                         QVB(IOB,KOB,JOB+1)+DxOB*                       &
-                         QVB(IOB+1,KOB,JOB+1)))+DZOB*((1.-              &
-                         DyOB)*((1.-DxOB)*QVB(IOB,KOBP,JOB)+DxOB        &
-                         *QVB(IOB+1,KOBP,JOB))+DyOB*((1.-DxOB           &
-                         )*QVB(IOB,KOBP,JOB+1)+DxOB*                    &
-                         QVB(IOB+1,KOBP,JOB+1))))
-            endif
-!kendixon: END
+            ERRF(4,N)=ERRF(4,N)+VAROBS(4,N)-((1.-DZOB)*((1.-DyOB)*((1.- &
+                      DxOB)*QVB(IOB,KOB,JOB)+DxOB*                      &
+                      QVB(IOB+1,KOB,JOB))+DyOB*((1.-DxOB)*              &
+                      QVB(IOB,KOB,JOB+1)+DxOB*                          &
+                      QVB(IOB+1,KOB,JOB+1)))+DZOB*((1.-                 &
+                      DyOB)*((1.-DxOB)*QVB(IOB,KOBP,JOB)+DxOB           &
+                      *QVB(IOB+1,KOBP,JOB))+DyOB*((1.-DxOB              &
+                      )*QVB(IOB,KOBP,JOB+1)+DxOB*                       &
+                      QVB(IOB+1,KOBP,JOB+1))))
+
+!           Store model moisture value (not the error!) at the location
+!           that the error was calculated
+            ERRF(10,N)=ERRF(10,N)+((1.-DZOB)*((1.-DyOB)*((1.- &
+                      DxOB)*QVB(IOB,KOB,JOB)+DxOB*                      &
+                      QVB(IOB+1,KOB,JOB))+DyOB*((1.-DxOB)*              &
+                      QVB(IOB,KOB,JOB+1)+DxOB*                          &
+                      QVB(IOB+1,KOB,JOB+1)))+DZOB*((1.-                 &
+                      DyOB)*((1.-DxOB)*QVB(IOB,KOBP,JOB)+DxOB           &
+                      *QVB(IOB+1,KOBP,JOB))+DyOB*((1.-DxOB              &
+                      )*QVB(IOB,KOBP,JOB+1)+DxOB*                       &
+                      QVB(IOB+1,KOBP,JOB+1))))
+
 
 !           Store model surface pressure (not the error!) at T-point
             ERRF(6,N)= .001*                                            &
@@ -1557,7 +1530,8 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
 
 !-----------------------------------------------------------------------
   SUBROUTINE nudob(j, ivar, aten, inest, ifrest, ktau, ktaur,         &
-                       xtime, mu, msfx, msfy, nndgv, nerrf, niobf, maxdom,   &
+                       xtime, mu, c1h, c2h, msfx, msfy,               &
+                       nndgv, nerrf, niobf, maxdom,                   &
                        npfi, ionf, rinxy, twindo,                     &
                        nudge_pbl,                                     &
                        sfcfact, sfcfacr,                              &
@@ -1574,7 +1548,8 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
                        iprt,                                          &
                        ids,ide, jds,jde, kds,kde,                     &  ! domain dims
                        ims,ime, jms,jme, kms,kme,                     &  ! memory dims
-                       its,ite, jts,jte, kts,kte )     ! old line
+                       its,ite, jts,jte, kts,kte,                     &  ! tile   dims
+                       qvb, obs_scl_neg_qv_innov ) ! Water vapor mixing ratio / scale negative qv innovations
 
 !-----------------------------------------------------------------------
   USE module_model_constants
@@ -1682,7 +1657,9 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
   REAL, INTENT(IN)     :: pbase( ims:ime, kms:kme )  ! Base pressure.
   REAL, INTENT(IN)     :: ptop
   REAL, INTENT(IN)     :: pp( ims:ime, kms:kme ) ! Pressure perturbation (Pa)
-  REAL, INTENT(IN)     :: mu(ims:ime)   ! Air mass on u, v, or mass-grid
+  REAL, INTENT(IN) , DIMENSION(ims:ime)    :: mu   ! Air mass on u, v, or mass-grid
+  REAL, INTENT(IN) , DIMENSION(kms:kme)    :: c1h  ! Hybrid coordinate weight
+  REAL, INTENT(IN) , DIMENSION(kms:kme)    :: c2h  ! Hybrid coordinate weight
   REAL, INTENT(IN)     :: msfx(ims:ime)  ! Map scale (only used for vars u & v)
   REAL, INTENT(IN)     :: msfy(ims:ime)  ! Map scale (only used for vars u & v)
   INTEGER, intent(in)  :: iswind        ! Nudge flag for wind
@@ -1700,8 +1677,14 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
   REAL, INTENT(IN)     :: terrh(ims:ime) ! Terrain height (m)
 ! INTEGER, INTENT(IN)  :: vik1(its:ite) ! Vertical infl k-level for full wts
 ! INTEGER, INTENT(IN)  :: vik2(its:ite) ! Vertical infl k-level for ramp
-  REAL, INTENT(IN)     :: zslab(ims:ime, kms:kme)    ! model ht above ground (m)
+  REAL, INTENT(IN)     :: zslab(ims:ime, kms:kme)    ! model ht above sea level (m)
   LOGICAL, INTENT(IN)  :: iprt                       ! print flag
+  REAL                 :: abs_pdiff_below, abs_pdiff_above
+  REAL,   INTENT(IN)   :: qvb( ims:ime, kms:kme, jms:jme ) ! Water vapor mixing ratio (QV)
+  INTEGER, INTENT(IN)  :: obs_scl_neg_qv_innov ! User choice on whether negative qv innovations should be scaled
+  REAL                 :: qvb_at_cur_loc, qvb_at_ob_loc ! QV at the current model or the observation location
+  REAL                 :: SCALE_FACTOR_NEG_QV_INNOV ! Multiply QV innovation by this factor to avoid nudging toward negative QV
+  REAL                 :: QVB_CUR_LOC_OVER_OB_LOC ! Ratio of QV at current model location compared to ob location
 
 ! Local variables
   integer :: mm(maxdom)
@@ -1736,14 +1719,6 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
 
   real :: scratch
   integer :: kk !ajb temp
-
-!kendixon: Open File for Saving Nuding Information
-!  if (xtime.eq.30.0) then
-!    write(msg,fmt='(A,F6.2)')  &
-!            'UW: Going into nudob xtime=',xtime
-!    call wrf_message(msg)
-!  endif
-!kendixon: end
 
 !      print *,'start nudob, nstat,j,ivar=',nstat,j,ivar
 !      if(ivar.ne.4)return
@@ -1986,6 +1961,7 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
           RX=RJ-RB(N)
 ! WEIGHTS FOR THE 3-D VARIABLES
           ERFIVR=ERRF(IVAR,N)
+          QVB_AT_OB_LOC=ERRF(10,N)
  
 !ajb Compute and add weights to sum only if nudge_pbl switch is on.
           if(nudge_pbl) then
@@ -2041,24 +2017,42 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
                   wtsig(k)=float(komax-k+1)/dk
                   WT(I,K)=WT(I,K)+TIMEWT*WTSIG(K)*WTIJ(i)
 
-!kendixon: Change WT2ERR so that nudging is not weighted average of all
-!          "observations" that affect the a grid point, but rather sums the
-!          effects of those "observations". WT will still be calculated, but 
-!          when the tendency is computed, WT won't be used!
-!          OLD CODE (NEXT 2 LINES):
-!                  WT2ERR(I,K)=WT2ERR(I,K)+TIMEWT*TIMEWT*WTIJ(i)*WTIJ(i)*WTSIG(K)    &
-!                              *WTSIG(K)*ERFIVR
-! v1 code:         WT2ERR(I,K)=WT2ERR(I,K)+ERFIVR
-! dixon_v2: Added check to make sure to only nudge a column once in a time-step,
-                  if(WT2ERR(I,K).eq.0.0) then 
-                     WT2ERR(I,K)=WT2ERR(I,K)+ERFIVR
-                  endif
-! dixon_v2: REMOVED the following four lines
-!          Also added a check to prevent over nudging 
-!                  if(WT2ERR(I,K).gt.(600*reserf(k))) then
-!                     WT2ERR(I,K)=600*reserf(k)
-!                  endif
-!kendixon: END
+                  !See Reen et al. poster/extended abstract (P13) from 2013 WRF
+                  !User's Workshop regarding the following moisture innovation 
+                  !scaling code.
+                  !If dealing with moisture and user chose to scale certain
+                  !negative QV innovations
+                  IF((IVAR.EQ.4).AND.(obs_scl_neg_qv_innov.gt.0)) THEN
+                   QVB_AT_CUR_LOC = MAX(QVB(I,K,J),0.0)
+                   !If the moisture innovation is negative and the model moisture
+                   ! is less at the current location where we are about to apply 
+                   ! the innovation than at the location where the ob was taken
+                   IF((ERFIVR.LT.0).AND.(QVB_AT_CUR_LOC.LT.QVB_AT_OB_LOC)) THEN
+                    !The ratio of the model moisture at the current location 
+                    ! compared to the ob location will be used to scale the
+                    !  innovation.
+                    QVB_CUR_LOC_OVER_OB_LOC = QVB_AT_CUR_LOC/QVB_AT_OB_LOC
+                    IF(obs_scl_neg_qv_innov.eq.1) THEN
+                     !Limit the innovation such that it cannot nudge towards a
+                     !negative value
+                     SCALE_FACTOR_NEG_QV_INNOV = MIN(1.0,ABS(QVB_AT_CUR_LOC/ERFIVR))
+                    ELSE
+                     !If the user chose a value for obs_scl_neg_qv_innov that
+                     !this code is unaware of, stop WRF
+                     IF (iprt) then
+                      write(msg,*) 'Unknown value of obs_scl_neg_qv_innov = ',obs_scl_neg_qv_innov
+                      call wrf_message(msg)
+                     ENDIF
+                     call wrf_error_fatal ( 'module_fddaobs_rtfdda: nudob: Unknown value of obs_scl_neg_qv_innov' )
+                    ENDIF
+                    !Scale the innovation
+                    ERFIVR = ERFIVR*SCALE_FACTOR_NEG_QV_INNOV
+                   ENDIF
+
+                  ENDIF
+                  WT2ERR(I,K)=WT2ERR(I,K)+TIMEWT*TIMEWT*WTIJ(i)*WTIJ(i)*WTSIG(K)    &
+                              *WTSIG(K)*ERFIVR
+
                 enddo
               ENDDO
 
@@ -2101,24 +2095,43 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
                   if(wtsig(k).le.0.0) EXIT LML
                     WT(I,K)=WT(I,K)+TIMEWT*WTSIG(K)*WTIJ(i)
 
-!kendixon: Change WT2ERR so that nudging is not weighted average of all
-!          "observations" that affect the a grid point, but rather sums the
-!          effects of those "observations". WT will still be calculated, but 
-!          when the tendency is computed, WT won't be used!
-!          OLD CODE (NEXT 2 LINES):
-!                    WT2ERR(I,K)=WT2ERR(I,K)+TIMEWT*TIMEWT*WTIJ(i)*WTIJ(i)*WTSIG(K)    &
-!                                *WTSIG(K)*ERFIVR
-! v1 code:         WT2ERR(I,K)=WT2ERR(I,K)+ERFIVR
-! dixon_v2: Added check to make sure to only nudge a column once in a time-step,
-                  if(WT2ERR(I,K).eq.0.0) then 
-                     WT2ERR(I,K)=WT2ERR(I,K)+ERFIVR
-                  endif
-! dixon_v2: REMOVED the following four lines
-!          Also added a check to prevent over nudging 
-!                  if(WT2ERR(I,K).gt.(600*reserf(k))) then
-!                     WT2ERR(I,K)=600*reserf(k)
-!                  endif
-!kendixon: END
+                   !See Reen et al. poster/extended abstract (P13) from 2013 WRF
+                   !User's Workshop regarding the following moisture innovation
+                   !If dealing with moisture and user chose to scale certain
+                   !negative QV innovations
+                   IF((IVAR.EQ.4).AND.(obs_scl_neg_qv_innov.gt.0)) THEN
+                    QVB_AT_CUR_LOC = MAX(QVB(I,K,J),0.0)
+                    !If the moisture innovation is negative and the model
+                    !moisture
+                    ! is less at the current location where we are about to apply
+                    ! the innovation than at the location where the ob was taken
+                    IF((ERFIVR.LT.0).AND.(QVB_AT_CUR_LOC.LT.QVB_AT_OB_LOC)) THEN
+                     !The ratio of the model moisture at the current location
+                     ! compared to the ob location will be used to scale the
+                     !  innovation.
+                     QVB_CUR_LOC_OVER_OB_LOC = QVB_AT_CUR_LOC/QVB_AT_OB_LOC
+                     IF(obs_scl_neg_qv_innov.eq.1) THEN
+                      !Limit the innovation such that it cannot nudge towards a
+                      !negative value
+                      SCALE_FACTOR_NEG_QV_INNOV = MIN(1.0,ABS(QVB_AT_CUR_LOC/ERFIVR))
+                     ELSE
+                      !If the user chose a value for obs_scl_neg_qv_innov that
+                      !this code is unaware of, stop WRF
+                      IF (iprt) then
+                       write(msg,*) 'Unknown value of obs_scl_neg_qv_innov = ',obs_scl_neg_qv_innov
+                       call wrf_message(msg)
+                      ENDIF
+                      call wrf_error_fatal ( 'module_fddaobs_rtfdda: nudob: Unknown value of obs_scl_neg_qv_innov' )
+                     ENDIF
+                     !Scale the innovation
+                     ERFIVR = ERFIVR*SCALE_FACTOR_NEG_QV_INNOV
+
+                    ENDIF
+                   ENDIF
+
+
+                   WT2ERR(I,K)=WT2ERR(I,K)+TIMEWT*TIMEWT*WTIJ(i)*WTIJ(i)*WTSIG(K)    &
+                                *WTSIG(K)*ERFIVR
                   enddo LML
               ENDDO
             endif
@@ -2195,6 +2208,8 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
 ! WEIGHTS FOR THE 3-D VARIABLES
 !
           ERFIVR=ERRF(IVAR,N)
+! Model QV at the observation location
+          QVB_AT_OB_LOC=ERRF(10,N)
 ! jc
           nsndlev=int(nlevs_ob(n)-lev_in_ob(n))+1
 ! yliu start
@@ -2302,25 +2317,41 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
 ! Now calculate WT and WT2ERR for each i,j,k point                      cajb
                   WT(I,K)=WT(I,K)+TIMEWT*WTIJ(i)*wtsig(k)
 
-!kendixon: Change WT2ERR so that nudging is not weighted average of all
-!          "observations" that affect the a grid point, but rather sums the
-!          effects of those "observations". WT will still be calculated, but 
-!          when the tendency is computed, WT won't be used!
-!          OLD CODE (NEXT 2 LINES):
-!                  WT2ERR(I,K)=WT2ERR(I,K)+TIMEWT*TIMEWT*WTIJ(i)*WTIJ(i)*        &
-!                              reserf(k)*wtsig(k)*wtsig(k)
-! v1 code:         WT2ERR(I,K)=WT2ERR(I,K)+reserf(k)
-! dixon_v2: Added check to make sure to only nudge a column once in a time-step,
-                  if(WT2ERR(I,K).eq.0.0) then 
-                     WT2ERR(I,K)=WT2ERR(I,K)+reserf(k)
-                  endif
-! dixon_v2: REMOVED the following four lines
-!          Also added a check to prevent over nudging 
-!                  if(WT2ERR(I,K).gt.(600*reserf(k))) then
-!                     WT2ERR(I,K)=600*reserf(k)
-!                  endif
-!kendixon: END
 
+                  !See Reen et al. poster/extended abstract (P13) from 2013 WRF
+                  !User's Workshop regarding the following moisture innovation
+                  !scaling code.
+                  !If dealing with moisture and user chose to scale certain
+                  !negative QV innovations
+                  IF((IVAR.EQ.4).AND.(obs_scl_neg_qv_innov.GT.0)) THEN
+                   QVB_AT_CUR_LOC = MAX(QVB(I,K,J),0.0)
+                   !If the moisture innovation is negative and the model moisture
+                   ! is less at the current location where we are about to apply
+                   ! the innovation than at the location where the ob was taken
+                   IF((ERFIVR.LT.0).AND.(QVB_AT_CUR_LOC.LT.QVB_AT_OB_LOC)) THEN
+                    !The ratio of the model moisture at the current location
+                    ! compared to the ob location will be used to scale the
+                    !  innovation.
+                    QVB_CUR_LOC_OVER_OB_LOC = QVB_AT_CUR_LOC/QVB_AT_OB_LOC
+                    IF(obs_scl_neg_qv_innov.eq.1) THEN
+                     !Limit the innovation such that it cannot nudge towards a
+                     !negative value
+                     SCALE_FACTOR_NEG_QV_INNOV = MIN(1.0,ABS(QVB_AT_CUR_LOC/ERFIVR))
+                    ELSE
+                     !If the user chose an value for obs_scl_neg_qv_innov that
+                     !this code is unaware of, stop WRF
+                     IF (iprt) then
+                      write(msg,*) 'Unknown value of obs_scl_neg_qv_innov = ',obs_scl_neg_qv_innov
+                      call wrf_message(msg)
+                     ENDIF
+                     call wrf_error_fatal ( 'module_fddaobs_rtfdda: nudob: Unknown value of obs_scl_neg_qv_innov' )
+                    ENDIF
+                    reserf(k) = reserf(k)*SCALE_FACTOR_NEG_QV_INNOV
+                   ENDIF
+                  ENDIF
+
+                  WT2ERR(I,K)=WT2ERR(I,K)+TIMEWT*TIMEWT*WTIJ(i)*WTIJ(i)*        &
+                              reserf(k)*wtsig(k)*wtsig(k)
                 enddo
               endif
 
@@ -2390,6 +2421,10 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
                 WTIJ(i)=(RIS-RSQ)/(RIS+RSQ)      
                 WTIJ(i)=AMAX1(0.0,WTIJ(i))
 ! yliu end
+! Set the pressure difference between the current model level and
+! both the level above and below to a number larger than the maximum (BPR)
+               abs_pdiff_above = maxsnd_gap+1.0
+               abs_pdiff_below = maxsnd_gap+1.0
 
 ! this loop goes to 1503
                 do nn=2,nsndlev
@@ -2401,14 +2436,19 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
                   .and. varobs(5,n+nn-1).gt.-800000.) then
                     pobhi=varobs(5,n+nn-1)
                     nhi=n+nn-1
-                    if(pobhi.lt.pijk .and. abs(pobhi-pijk).lt.0.5*maxsnd_gap) then
-                      go to 1502        ! within maxsnd_gap/2 of obs height
+! Check if current level in the innovation is above the current
+! model level but within maxsnd_gap (BPR)
+                    abs_pdiff_above=abs(pobhi-pijk)
+                    if(pobhi.le.pijk .and. abs_pdiff_above.le.maxsnd_gap) then
+                      go to 1502        ! within maxsnd_gap of obs height
                     endif
                   endif
 
                 enddo
 
-! did not find any ob above within maxsnd_gap/2, so jump out 
+! OLD: did not find any ob above within maxsnd_gap/2, so jump out
+! NEW: did not find any ob above within maxsnd_gap, so jump out
+
                 go to 1501
  1502           continue
 
@@ -2418,21 +2458,85 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
                   .and. varobs(5,nnjc).gt.-800000.) then
                     poblo=varobs(5,nnjc)
                     nlo=nnjc
-                    if(poblo.gt.pijk .and. abs(poblo-pijk).lt.0.5*maxsnd_gap) then
-                      go to 1505        ! within maxsnd_gap/2 of obs height
+! Check if current level in the innovation is below the current
+! model level but within maxsnd_gap (BPR)
+                    abs_pdiff_below=abs(poblo-pijk)
+                    if(poblo.ge.pijk .and. abs_pdiff_below.le.maxsnd_gap) then
+                      go to 1505        ! within maxsnd_gap of obs height
                     endif
                   endif
                 enddo
 !yliu end --
 
-! did not find any ob below within maxsnd_gap/2, so jump out 
+! OLD: did not find any ob below within maxsnd_gap/2, so jump out
+! NEW: did not find any ob below within maxsnd_gap, so jump out
+
                 go to 1501
  1505           continue
+!BPR BEGIN
+! Ensure that sum of gap between model level and the closest
+! innovation level above that combined with the sum of the gap
+! between the model level and the closest innovation level below
+! that is less than or equal to the maximum allowed gap
+                if((abs_pdiff_below+abs_pdiff_above).gt.maxsnd_gap) then
+                 goto 1501
+                endif
 
 ! interpolate to model level
-                pdiffj=alog(pijk/poblo)/alog(pobhi/poblo)
+! Avoid potential division by zero (or near-zero) that may now
+! occur when the model pressure exactly matches the pressure of
+! one of the levels in the innovation profile.
+! Note that these variables are in terms of cb so we are assuming that
+! if the closest innovation level below the model level is within
+! 0.00001 hPa of the the closest innovation level above the model
+! level then those two levels are identical. (BPR)
+                IF(abs(pobhi-poblo).lt.0.000001) THEN
+                 pdiffj=0
+                ELSE
+                 !Original code just used following statement
+                 pdiffj=alog(pijk/poblo)/alog(pobhi/poblo)
+                ENDIF
+
                 reserf(k)=errf(ivar,nlo)+                               &
                             (errf(ivar,nhi)-errf(ivar,nlo))*pdiffj
+
+                !See Reen et al. poster/extended abstract (P13) from 2013 WRF
+                !User's Workshop regarding the following moisture innovation
+                !scaling code.
+                !If dealing with moisture and user chose to scale certain
+                !negative QV innovations
+                IF((IVAR.EQ.4).AND.(obs_scl_neg_qv_innov.GT.0)) THEN
+                 QVB_AT_CUR_LOC = QVB(I,K,J)
+                 !Vertically intepolate observed moisture
+                 QVB_AT_OB_LOC=errf(10,nlo)+                               &
+                              (errf(10,nhi)-errf(10,nlo))*pdiffj
+                 !If the moisture innovation is negative and the model
+                 !moisture
+                 ! is less at the current location where we are about to apply
+                 ! the innovation than at the location where the ob was taken
+                 IF((reserf(k).LT.0).AND.(QVB_AT_CUR_LOC.LT.QVB_AT_OB_LOC)) THEN
+                  !The ratio of the model moisture at the current location
+                  ! compared to the ob location will be used to scale the
+                  !  innovation.
+                  QVB_CUR_LOC_OVER_OB_LOC = QVB_AT_CUR_LOC/QVB_AT_OB_LOC
+                  IF(obs_scl_neg_qv_innov.eq.1) THEN
+                   !Limit the innovation such that it cannot nudge towards a
+                   !negative value
+                   SCALE_FACTOR_NEG_QV_INNOV = MIN(1.0,ABS(QVB_AT_CUR_LOC/reserf(k)))
+                  ELSE
+                   !If the user chose a value for obs_scl_neg_qv_innov that
+                   !this code is unaware of, stop WRF
+                   IF (iprt) then
+                    write(msg,*) 'Unknown value of obs_scl_neg_qv_innov = ',obs_scl_neg_qv_innov
+                    call wrf_message(msg)
+                   ENDIF
+                   call wrf_error_fatal ( 'module_fddaobs_rtfdda: nudob: Unknown value of obs_scl_neg_qv_innov' )
+                  ENDIF
+                  reserf(k) = reserf(k)*SCALE_FACTOR_NEG_QV_INNOV
+                 ENDIF
+
+                ENDIF
+
                 wtsig(k)=1.
   
  1501           continue
@@ -2442,25 +2546,9 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
                 if(nudge_pbl .or. k.gt.kpblt(i)) then
 
                   WT(I,K)=WT(I,K)+TIMEWT*WTIJ(i)*wtsig(k)
- 
-!kendixon: Change WT2ERR so that nudging is not weighted average of all
-!          "observations" that affect the a grid point, but rather sums the
-!          effects of those "observations". WT will still be calculated, but 
-!          when the tendency is computed, WT won't be used!
-!          OLD CODE (NEXT 2 LINES):
-!                  WT2ERR(I,K)=WT2ERR(I,K)+TIMEWT*TIMEWT*WTIJ(i)*WTIJ(i)*        &
-!                              reserf(k)*wtsig(k)*wtsig(k)
-! v1 code:         WT2ERR(I,K)=WT2ERR(I,K)+reserf(k)
-! dixon_v2: Added check to make sure to only nudge a column once in a time-step,
-                  if(WT2ERR(I,K).eq.0.0) then 
-                     WT2ERR(I,K)=WT2ERR(I,K)+reserf(k)
-                  endif
-! dixon_v2: REMOVED the following four lines
-!          Also added a check to prevent over nudging 
-!                  if(WT2ERR(I,K).gt.(600*reserf(k))) then
-!                     WT2ERR(I,K)=600*reserf(k)
-!                  endif
-!kendixon: END
+  
+                  WT2ERR(I,K)=WT2ERR(I,K)+TIMEWT*TIMEWT*WTIJ(i)*WTIJ(i)*        &
+                              reserf(k)*wtsig(k)*wtsig(k)
                 endif
 
               enddo   ! enddo k levels
@@ -2535,11 +2623,7 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
     DO I=i_s,i_e
 
       IF(MOD(KTAU,INFR).EQ.0.OR.(IFREST.AND.KTAU.EQ.KTAUR))THEN
-!kendixon: To avoid weighting the observations, and make them additive
-! OLD CODE (1 LINE):
-!        W2EOWT=WT2ERR(I,K)/WT(I,K)
-        W2EOWT=WT2ERR(I,K)
-!kendixon: END
+        W2EOWT=WT2ERR(I,K)/WT(I,K)
       ELSE
         W2EOWT=SAVWT(IPL,I,K)
 
@@ -2593,11 +2677,7 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
   IF(MOD(KTAU,INFR).EQ.0.OR.(IFREST.AND.KTAU.EQ.KTAUR))THEN
     DO K=1,kte
       DO I=its,ite
-!kendixon: To avoid weighting the observations, and make them additive
-! OLD CODE (1 LINE):
-!        SAVWT(IPL,I,K)=WT2ERR(I,K)/WT(I,K)
-        SAVWT(IPL,I,K)=WT2ERR(I,K)
-!kendixon: END
+        SAVWT(IPL,I,K)=WT2ERR(I,K)/WT(I,K)
 
 !        write(6,'(a,4i4,f8.3)') 'i,j,k,ipl,savwt = ',i,j,k,ipl,savwt(ipl,i,k)
       ENDDO
@@ -2624,11 +2704,7 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
   DO K=1,kte
     DO I=i_s,i_e
       IF(MOD(KTAU,INFR).EQ.0.OR.(IFREST.AND.KTAU.EQ.KTAUR))THEN
-!kendixon: To avoid weighting the observations, and make them additive
-! OLD CODE (1 LINE):
-!        W2EOWT=WT2ERR(I,K)/WT(I,K)
-        W2EOWT=WT2ERR(I,K)
-!kendixon: END
+        W2EOWT=WT2ERR(I,K)/WT(I,K)
       ELSE
         W2EOWT=SAVWT(IPL,I,K)
       ENDIF
@@ -2637,7 +2713,7 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
 !            scratch = GITQ*MU(I)*W2EOWT*TFACI*ISTQ*GFACTOR
 !            write(6,*) 'ATEN calc: k = ',k
 !            write(6,*) 'T before: aten = ',aten(i,k),' scr = ',scratch
-!            write(6,*) 'GITQ = ',gitq,' MU = ',mu(i),                  &
+!            write(6,*) 'GITQ = ',gitq,' MU = ',MU(i),                  &
 !                       ' W2EOWT = ',w2eowt
 !            write(6,*) ' TFACI = ',tfaci,' ISTQ = ',istq,              &
 !                       ' GFACTOR = ',gfactor
@@ -2647,36 +2723,14 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
 !            scratch = GITQ*MU(I)*W2EOWT*TFACI*ISTQ*GFACTOR
 !            write(6,*) 'ATEN calc: k = ',k
 !            write(6,*) 'Q before: aten = ',aten(i,k),' scr = ',scratch
-!            write(6,*) 'GITQ = ',gitq,' MU = ',mu(i),
+!            write(6,*) 'GITQ = ',gitq,' MU = ',MU(i),
 !     $                 ' W2EOWT = ',w2eowt
 !            write(6,*) ' TFACI = ',tfaci,' ISTQ = ',istq,
 !     $                 ' GFACTOR = ',gfactor
 !        endif
 
-!kendixon: print details of nudging
-      if(MU(I)*W2EOWT.gt.0.0)then
-       write(msg,fmt='(A,I4,A,I4,A,I4,A,F6.2,A,F10.8,A,F10.8)')  &
-               'DIXON NUDGE: i=',i,' j=',j,' k=',k,' t=',xtime,' aten0=', &
-               ATEN(i,k),' aten1=',ATEN(i,k)+GITQ*MU(I)*W2EOWT*TFACI*ISTQ*GFACTOR
-       call wrf_message(msg)
-      endif
-!kendixon: END
-
-!kendixon: add in xland check (1=LAND,2=WATER) for WWLLN lightning only?
-!dixon_v2: changed so that land/ocean doesn't matter anymore (dropped 6x)
-!---  Old Lines  ---
-!      ATEN(i,k)=ATEN(i,k)+GITQ*MU(I)                       &
-!                  *W2EOWT*TFACI*ISTQ       *GFACTOR   !yliu *GFACTOR
-!--- Description ---
-!    ATEN = Tendency, GITQ = Nudging Coeff, MU(I)= Air Mass (?) 
-!        W2EOWT  = Diff in Mixing ratio between model value and saturation
-!        TFACI   = Scale factor for ramp down (1 if obs_idynin=0)
-!        ISTQ    = 1 (if it is temperature or moisture being nudged)
-!        GFACTOR = 1 (since its a mult. of NSCAN, which is always passed as 0)
       ATEN(i,k)=ATEN(i,k)+GITQ*MU(I)                       &
                   *W2EOWT*TFACI*ISTQ       *GFACTOR   !yliu *GFACTOR
-!kendixon: END
-
 
 !        if(ivar .eq. 3 .and. i.eq.39 .and. j.eq.49) then
 !            write(6,*) 'T after: aten = ',aten(i,k),' scr = ',scratch
@@ -2691,11 +2745,7 @@ SUBROUTINE errob(inest, ub, vb, tb, t0, qvb, pbase, pp, rovcp,  &
   IF(MOD(KTAU,INFR).EQ.0.OR.(IFREST.AND.KTAU.EQ.KTAUR)) THEN
     DO K=1,kte
       DO I=its,ite
-!kendixon: To avoid weighting the observations, and make them additive
-! OLD CODE (1 LINE):
-!        SAVWT(IPL,I,K)=WT2ERR(I,K)/WT(I,K)
-        SAVWT(IPL,I,K)=WT2ERR(I,K)
-!kendixon: END
+        SAVWT(IPL,I,K)=WT2ERR(I,K)/WT(I,K)
       ENDDO
     ENDDO
   ENDIF
